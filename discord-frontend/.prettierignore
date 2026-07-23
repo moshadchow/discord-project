@@ -1,0 +1,6 @@
+dist
+node_modules
+coverage
+.codex
+.agents
+AGENTS.md
