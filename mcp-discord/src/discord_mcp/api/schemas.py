@@ -75,3 +75,55 @@ class ErrorResponse(BaseModel):
 
     success: bool = False
     message: str
+
+
+class UserSummary(BaseModel):
+    """Minimal user info in API responses."""
+
+    id: int
+    username: str
+    full_name: str
+    role: str
+
+
+class LoginRequest(BaseModel):
+    """Request body for user login."""
+
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Response after successful login."""
+
+    success: bool = True
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserSummary
+
+
+class LogoutResponse(BaseModel):
+    """Response after logout."""
+
+    success: bool = True
+    message: str
+
+
+class RegisterUserRequest(BaseModel):
+    """Request body for user registration."""
+
+    username: str
+    password: str
+    confirm_password: str
+    full_name: str
+    email: Optional[str] = None
+    role: Optional[str] = "User"
+
+
+class RegisterUserResponse(BaseModel):
+    """Response after successful user registration."""
+
+    success: bool = True
+    message: str
+    data: UserSummary

@@ -46,3 +46,20 @@ def load_monitored_channels_config() -> MonitoredChannelsConfig:
 def _parse_csv_env(name: str) -> frozenset[str]:
     value = os.getenv(name, "")
     return frozenset(part.strip() for part in value.split(",") if part.strip())
+
+
+@dataclass(frozen=True)
+class AuthConfig:
+    jwt_secret_key: str
+    jwt_algorithm: str
+    jwt_access_token_expire_minutes: int
+
+
+def load_auth_config() -> AuthConfig:
+    return AuthConfig(
+        jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-production"),
+        jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
+        jwt_access_token_expire_minutes=int(
+            os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
+        ),
+    )

@@ -1,4 +1,4 @@
-"""SQLModel table mapping for the existing issues table."""
+"""SQLModel table mapping for the existing issues table and users table."""
 
 from datetime import date, datetime, time
 from typing import Any, Optional
@@ -26,5 +26,22 @@ class IssueRow(SQLModel, table=True):
     attachments: Any = Field(sa_type=JSON, default=list)
     message_timestamp: datetime
     message_timestamp_local: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserRow(SQLModel, table=True):
+    """Maps to the PostgreSQL users table."""
+
+    __tablename__ = "users"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(unique=True, index=True, max_length=100)
+    password_hash: str = Field(sa_column_kwargs={"server_default": None})
+    full_name: str = Field(max_length=200)
+    email: Optional[str] = Field(default=None, unique=True, max_length=255)
+    role: str = Field(default="User", max_length=50)
+    is_active: bool = Field(default=True)
+    last_login_at: Optional[datetime] = Field(default=None)
     created_at: datetime
     updated_at: datetime

@@ -100,11 +100,11 @@ def _create_test_app(rows=None, gateway=None):
     from fastapi.testclient import TestClient
 
     from discord_mcp.api.deps import get_discord_gateway, get_issue_service
-    from discord_mcp.api.routes import router
+    from discord_mcp.api.routes import issue_router
     from discord_mcp.api.service import IssueQueryService
 
     app = FastAPI()
-    app.include_router(router, prefix="/api")
+    app.include_router(issue_router, prefix="/api")
 
     repo = FakeRepository(rows)
     gw = gateway or FakeGateway()

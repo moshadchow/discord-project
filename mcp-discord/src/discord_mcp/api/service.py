@@ -1,12 +1,13 @@
-"""Service layer for issue query and mutation business logic."""
+"""Service layer for issue query and mutation business logic, and authentication."""
 
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 from .discord_gateway import DiscordGateway
-from .models import IssueRow
-from .repository import IssueRepository
+from .models import IssueRow, UserRow
+from .repository import IssueRepository, UserRepository
+from ..core.security import verify_password
 
 logger = logging.getLogger("discord-mcp-api.service")
 
@@ -222,4 +223,136 @@ def _row_to_dict(row: IssueRow) -> dict:
         "message_timestamp_local": row.message_timestamp_local,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
+    }
+
+
+class AuthService:
+    """Business logic for user authentication."""
+
+    def __init__(self, repository: UserRepository) -> None:
+        self._repository = repository
+
+    async def authenticate_user(
+        self, username: str, password: str
+    ) -> tuple[Optional[dict], Optional[str]]:
+        """Authenticate a user by username and password.
+
+        Returns (user_dict, token) on success, or (None, error_message) on failure.
+        """
+        logger.info("Login attempt", extra={"username": username})
+
+        user = await self._repository.get_by_username(username)
+        if user is None:
+            logger.warning("Failed login: user not found", extra={"username": username})
+            return None, "Invalid username or password."
+
+        if not verify_password(password, user.password_hash):
+            logger.warning("Failed login: wrong password", extra={"username": username})
+            return None, "Invalid username or password."
+
+        if not user.is_active:
+            logger.warning("Failed login: inactive user", extra={"username": username})
+            return None, "Invalid username or password."
+
+        await self._repository.update_last_login(user.id)
+
+        from ..core.jwt import create_access_token
+
+        token = create_access_token(user.id, user.username, user.role)
+
+        logger.info("Successful login", extra={"username": username, "user_id": user.id})
+
+        return _user_to_dict(user), token
+
+    async def get_current_user_from_token(self, token: str) -> Optional[dict]:
+        """Validate a JWT token and return the corresponding user dict.
+
+        Returns None if the token is invalid, expired, or the user is not found.
+        """
+        try:
+            from ..core.jwt import decode_access_token
+
+            payload = decode_access_token(token)
+        except Exception:
+            logger.warning("JWT validation failed")
+            return None
+
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            return None
+
+        try:
+            user_id = int(user_id_str)
+        except (ValueError, TypeError):
+            return None
+
+        user = await self._repository.get_by_id(user_id)
+        if user is None or not user.is_active:
+            return None
+
+        return _user_to_dict(user)
+
+    async def register_user(
+        self,
+        username: str,
+        password: str,
+        confirm_password: str,
+        full_name: str,
+        email: str | None = None,
+        role: str = "User",
+    ) -> tuple[Optional[dict], Optional[str]]:
+        """Register a new user.
+
+        Returns (user_dict, success_message) on success,
+        or (None, error_message) on failure.
+        """
+        logger.info("Registration attempt", extra={"username": username})
+
+        if password != confirm_password:
+            logger.warning("Registration failed: password mismatch", extra={"username": username})
+            return None, "Passwords do not match."
+
+        existing = await self._repository.get_by_username(username)
+        if existing is not None:
+            logger.warning("Registration failed: duplicate username", extra={"username": username})
+            return None, "Username already exists."
+
+        if email is not None:
+            existing_email = await self._repository.get_by_email(email)
+            if existing_email is not None:
+                logger.warning("Registration failed: duplicate email", extra={"username": username})
+                return None, "Email already exists."
+
+        from ..core.security import hash_password
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        user_row = UserRow(
+            username=username,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            email=email,
+            role=role,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        try:
+            created = await self._repository.create_user(user_row)
+        except Exception:
+            logger.exception("Failed to create user", extra={"username": username})
+            raise
+
+        logger.info("User registered", extra={"username": username, "user_id": created.id})
+
+        return _user_to_dict(created), "User registered successfully."
+
+
+def _user_to_dict(row: UserRow) -> dict:
+    """Convert a UserRow to a dictionary suitable for API responses."""
+    return {
+        "id": row.id,
+        "username": row.username,
+        "full_name": row.full_name,
+        "role": row.role,
     }
